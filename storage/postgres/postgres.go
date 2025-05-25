@@ -75,6 +75,18 @@ func ValidateOrder(v *validator.Validator, toys []*ords.OrderItem, address strin
 	}
 }
 
+func ValidateOrderBack(v *validator.Validator, toys []*ords.ToyReturn, address string) {
+	v.Check(len(toys) > 0, "text", "at least 1 toy should be included!")
+	v.Check(strings.TrimSpace(address) != "", "address", "delivery address is required!")
+
+	for i, item := range toys {
+		prefix := fmt.Sprintf("toys[%d]", i)
+
+		v.Check(item.ToyId != emptyValue, prefix+".toy_id", "toy id must be provided")
+		v.Check(item.Quantity != emptyValue, prefix+".quantity", "quantity should be provided")
+	}
+}
+
 func (s *Storage) CreateOrder(ctx context.Context, toys []*data.OrderItem, address string, userID int64) (int64, ords.OperationStatus, string) {
 	query := `INSERT INTO orders (user_id, address) 
 VALUES ($1, $2)
@@ -118,6 +130,47 @@ RETURNING id`
 
 }
 
+func (s *Storage) OrderBack(ctx context.Context, toys []*data.OrderItem, address string, userID int64) (int64, ords.OperationStatus, string) {
+	println("orders db part")
+	query := `INSERT INTO orders (user_id, address) 
+VALUES ($1, $2)
+RETURNING id`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	args := []any{userID, address}
+	var ordID int64
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, ords.OperationStatus_STATUS_INTERNAL_ERROR, "could not start transaction"
+	}
+
+	status := tx.QueryRowContext(ctx, query, args...).Scan(&ordID)
+	if status != nil {
+
+		return 0, ords.OperationStatus_STATUS_INTERNAL_ERROR, "internal error! order was not created"
+	}
+	defer tx.Rollback()
+	query1 := `INSERT INTO order_items (order_id, toy_id, toy_name, quantity)
+	VALUES ($1, $2, $3, $4)
+	RETURNING id`
+
+	for _, toy := range toys {
+		_, err := tx.ExecContext(ctx, query1, ordID, toy.ToyId, toy.ToyName, toy.Quantity)
+		if err != nil {
+			tx.Rollback()
+			return 0, ords.OperationStatus_STATUS_INTERNAL_ERROR, "failed to create a toy"
+		}
+
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, ords.OperationStatus_STATUS_INTERNAL_ERROR, "could not commit transaction"
+	}
+
+	return ordID, ords.OperationStatus_STATUS_OK, "order creation was successful"
+}
+
 func (s *Storage) DeleteOrder(ctx context.Context, orderId int64, userId int64) ords.OperationStatus {
 	query := `DELETE FROM orders 
 	WHERE user_id = $1 AND id = $2`
@@ -144,10 +197,11 @@ func (s *Storage) DeleteOrder(ctx context.Context, orderId int64, userId int64) 
 }
 
 func (s *Storage) GetOrder(ctx context.Context, orderId int64, userId int64) data.Order {
+	println("db part")
 	query := `SELECT id, user_id, address, status, created_at FROM orders
 WHERE id = $1 AND user_id = $2
 `
-	query1 := `SELECT id, toy_name, quantity FROM order_items
+	query1 := `SELECT toy_id, toy_name, quantity FROM order_items
 WHERE order_id = $1
 `
 

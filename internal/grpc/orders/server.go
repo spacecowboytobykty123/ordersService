@@ -24,6 +24,7 @@ type Orders interface {
 	GetOrder(ctx context.Context, orderId int64) data.Order
 	ChangeOrderStatus(ctx context.Context, orderId int64, newStatus ords.OrderStatus) ords.OperationStatus
 	OrderHistory(ctx context.Context, page int32, pageSize int32) ([]*data.Order, int32)
+	OrderBack(ctx context.Context, toys []*data.OrderItem, address string) (int64, ords.OperationStatus, string)
 }
 
 func Register(gRPC *grpc.Server, orders Orders) {
@@ -123,6 +124,25 @@ func (s *serverAPI) ListOrderHistory(ctx context.Context, r *ords.OrderHistoryRe
 	}, nil
 }
 
+func (s *serverAPI) OrderBack(ctx context.Context, r *ords.OrderBackRequest) (*ords.OrderBackResponse, error) {
+	v := validator.New()
+
+	toys := r.GetToys()
+	address := r.GetAddress()
+
+	if postgres.ValidateOrderBack(v, toys, address); !v.Valid() {
+		return nil, collectErrors(v)
+	}
+
+	orderId, opStatus, msg := s.orders.OrderBack(ctx, mapToyReturnToDataToy(toys), address)
+
+	return &ords.OrderBackResponse{
+		OrderId:      orderId,
+		OrderStatus:  opStatus,
+		ErrorMessage: msg,
+	}, nil
+}
+
 func collectErrors(v *validator.Validator) error {
 	var b strings.Builder
 	for field, msg := range v.Errors {
@@ -133,13 +153,17 @@ func collectErrors(v *validator.Validator) error {
 
 func ToDomainOrderItems(orders []*ords.OrderItem) []*data.OrderItem {
 	domainItems := make([]*data.OrderItem, 0, len(orders))
+	println("sigma")
 	for _, o := range orders {
 		domainItems = append(domainItems, &data.OrderItem{
 			ToyId:    o.ToyId,
 			ToyName:  o.ToyName,
 			Quantity: o.Quantity,
+			ImageURL: o.ImageUrl,
 		})
+		println(o.ImageUrl)
 	}
+
 	return domainItems
 }
 
@@ -179,11 +203,31 @@ func ToDomainOrder(orders []*data.Order) []*ords.Order {
 
 func fromOrderItemDataToProto(orders []*data.OrderItem) []*ords.OrderItem {
 	domainItems := make([]*ords.OrderItem, 0, len(orders))
-	for _, o := range orders {
+
+	for i, o := range orders {
 		domainItems = append(domainItems, &ords.OrderItem{
 			ToyId:    o.ToyId,
 			ToyName:  o.ToyName,
 			Quantity: o.Quantity,
+			Value:    o.Value,
+			ImageUrl: o.ImageURL,
+		})
+		fmt.Printf("Item %d -> ToyID: %d, ImageURL: '%s'\n", i, o.ToyId, o.ImageURL)
+	}
+
+	return domainItems
+}
+
+func mapToyReturnToDataToy(returnToys []*ords.ToyReturn) []*data.OrderItem {
+	domainItems := make([]*data.OrderItem, 0, len(returnToys))
+
+	for _, o := range returnToys {
+		domainItems = append(domainItems, &data.OrderItem{
+			ToyId:    o.ToyId,
+			ToyName:  o.Title,
+			Quantity: o.Quantity,
+			Value:    o.Value,
+			ImageURL: o.ImageUrl,
 		})
 	}
 	return domainItems
