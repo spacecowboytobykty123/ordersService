@@ -71,7 +71,7 @@ func main() {
 	var cfg Config
 
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
-	flag.StringVar(&cfg.DB.DSN, "db-dsn", "postgres://orders:pass@localhost:5432/orders?sslmode=disable&client_encoding=UTF8", "PostgresSQL DSN")
+	flag.StringVar(&cfg.DB.DSN, "db-dsn", "postgres://orders:pass@localhost:5432/?sslmode=disable&client_encoding=UTF8", "PostgresSQL DSN")
 	flag.IntVar(&cfg.DB.MaxOpenConns, "db-max-open-conns", 25, "PostgresSQL max open connections")
 	flag.IntVar(&cfg.DB.MaxIdleConns, "db-max-Idle-conns", 25, "PostgresSQL max Idle connections")
 	flag.StringVar(&cfg.DB.MaxIdleTime, "db-max-Idle-time", "15m", "PostgresSQl max Idle time")

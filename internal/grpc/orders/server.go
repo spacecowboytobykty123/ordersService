@@ -3,14 +3,17 @@ package orders
 import (
 	"context"
 	"fmt"
-	ords "github.com/spacecowboytobykty123/ordersProto/gen/go/orders"
+	"strings"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	ords "github.com/spacecowboytobykty123/ordersProto/gen/go/orders"
+
 	"ordersService/internal/data"
 	"ordersService/internal/validator"
 	"ordersService/storage/postgres"
-	"strings"
 )
 
 type serverAPI struct {
