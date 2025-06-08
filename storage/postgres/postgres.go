@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	ords "github.com/spacecowboytobykty123/ordersProto/gen/go/orders"
+	"log"
 	"math"
 	"ordersService/internal/data"
 	"ordersService/internal/validator"
@@ -29,7 +30,24 @@ type StorageDetails struct {
 }
 
 func OpenDB(details StorageDetails) (*Storage, error) {
-	db, err := sql.Open("postgres", details.DSN)
+	var db *sql.DB
+	var err error
+	for i := 0; i < 10; i++ {
+		db, err = sql.Open("postgres", details.DSN)
+		if err == nil {
+			err = db.Ping()
+		}
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+		log.Printf("retrying DB connection... (%d/10)", i+1)
+	}
+
+	if err != nil {
+
+		log.Fatal("failed to connect to database after retries:", err)
+	}
 
 	if err != nil {
 		return nil, err
